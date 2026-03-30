@@ -34,8 +34,9 @@ type Dependency struct {
 }
 
 type options struct {
-	configFS fs.FS
-	deps     []Dependency
+	configFS     fs.FS
+	deps         []Dependency
+	outputFormat string // "json", "yaml", "pcf", etc. for text rendering
 }
 
 // WithSchema adds a schema dependency using the default name "schema".
@@ -66,6 +67,13 @@ func WithNamedSchema(name string, fsys fs.FS) Option {
 // it via @Name imports. Multiple dependencies can be added.
 func WithDependency(dep Dependency) Option {
 	return func(o *options) { o.deps = append(o.deps, dep) }
+}
+
+// WithOutputFormat sets the output format for text rendering.
+// Supported values: "json", "jsonnet", "pcf", "properties", "plist",
+// "textproto", "xml", "yaml". Used by LoadText and EmbeddedPklTextLoader.
+func WithOutputFormat(format string) Option {
+	return func(o *options) { o.outputFormat = format }
 }
 
 // WithConfigFS sets an fs.FS containing the user config files.
@@ -257,6 +265,92 @@ func EmbeddedPklLoader[T any](configFS fs.FS, opts ...Option) func(context.Conte
 		defer evaluator.Close()
 
 		return load(ctx, evaluator, &pkl.ModuleSource{Uri: entryURI, Contents: string(data)})
+	}
+}
+
+// EmbeddedPklTextLoader is like EmbeddedPklLoader but renders the module as
+// text using the specified output format instead of decoding into a Go struct.
+// Use WithOutputFormat to set the format (defaults to "pcf" if not set).
+//
+// This is useful for rendering config files to JSON, YAML, or other text
+// formats without needing generated Go types.
+func EmbeddedPklTextLoader(configFS fs.FS, opts ...Option) func(context.Context, string) (string, error) {
+	var o options
+	for _, fn := range opts {
+		fn(&o)
+	}
+
+	outputFormat := o.outputFormat
+	if outputFormat == "" {
+		outputFormat = "pcf"
+	}
+
+	for i := range o.deps {
+		if o.deps[i].PackageURI == "" {
+			o.deps[i].PackageURI = "package://localhost/" + o.deps[i].Name + "@0.0.0"
+		}
+	}
+
+	return func(ctx context.Context, filePath string) (string, error) {
+		if len(o.deps) == 0 {
+			return "", fmt.Errorf("config: no schema dependencies configured")
+		}
+
+		data, err := fs.ReadFile(configFS, filePath)
+		if err != nil {
+			return "", fmt.Errorf("config: read %s: %w", filePath, err)
+		}
+
+		entryURI := &url.URL{
+			Scheme: "embed",
+			Path:   filepath.Join("/", "config", filepath.Base(filepath.ToSlash(filePath))),
+		}
+
+		rootDepsJSON, err := buildRootDepsJSONMulti(o.deps)
+		if err != nil {
+			return "", fmt.Errorf("config: %w", err)
+		}
+
+		vfs := overlayFS{
+			{prefix: "config", inner: staticFS{name: "PklProject.deps.json", content: rootDepsJSON}},
+			{prefix: "config", inner: configFS},
+		}
+
+		rawDeps := make(map[string]any, len(o.deps))
+		for _, dep := range o.deps {
+			vfs = append(vfs, prefixFS{prefix: dep.Name, inner: dep.FS})
+
+			baseUri, version := splitPackageURI(dep.PackageURI)
+			rawDeps[dep.Name] = &pkl.Project{
+				ProjectFileUri: "embed:///" + dep.Name + "/PklProject",
+				Package: &pkl.ProjectPackage{
+					Name:    dep.Name,
+					BaseUri: baseUri,
+					Version: version,
+					Uri:     dep.PackageURI,
+				},
+			}
+		}
+
+		rootProject := &pkl.Project{
+			ProjectFileUri:  "embed:///config/PklProject",
+			RawDependencies: rawDeps,
+		}
+
+		evaluator, err := pkl.NewEvaluator(ctx,
+			pkl.PreconfiguredOptions,
+			pkl.WithFs(vfs, "embed"),
+			pkl.WithProject(rootProject),
+			func(opts *pkl.EvaluatorOptions) {
+				opts.OutputFormat = outputFormat
+			},
+		)
+		if err != nil {
+			return "", fmt.Errorf("config: create embedded pkl evaluator: %w", err)
+		}
+		defer evaluator.Close()
+
+		return evaluator.EvaluateOutputText(ctx, &pkl.ModuleSource{Uri: entryURI, Contents: string(data)})
 	}
 }
 

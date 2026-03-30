@@ -172,6 +172,16 @@ Each dependency's `fs.FS` must contain at its root:
 - `PklProject.deps.json` -- resolved dependencies (run `pkl project resolve`)
 - The schema `.pkl` files and any subdirectories
 
+### EmbeddedPklTextLoader
+
+```go
+func EmbeddedPklTextLoader(configFS fs.FS, opts ...Option) func(context.Context, string) (string, error)
+```
+
+Like `EmbeddedPklLoader` but renders the module as text instead of decoding into a Go struct. Set the format with `WithOutputFormat` (defaults to `"pcf"`). Supported formats: `"json"`, `"jsonnet"`, `"pcf"`, `"properties"`, `"plist"`, `"textproto"`, `"xml"`, `"yaml"`.
+
+This is useful when you need serialized output without generated Go types, or for roundtripping config through text formats.
+
 ### PklLoader
 
 ```go
@@ -206,6 +216,12 @@ Describes a Pkl schema package. Config files reference it via `@Name` imports.
 | `WithDependency(Dependency)` | Add a dependency with full control over name, FS, and package URI. |
 
 Multiple dependencies can be added. Each is available via its `@name` prefix in config files.
+
+### Output format
+
+| Option | Description |
+|--------|-------------|
+| `WithOutputFormat(format)` | Set the text output format for `EmbeddedPklTextLoader`. Supported: `"json"`, `"yaml"`, `"pcf"`, `"jsonnet"`, `"properties"`, `"plist"`, `"textproto"`, `"xml"`. |
 
 ### Config source
 
@@ -317,6 +333,41 @@ amends "@my-config/AppConfig.pkl"
 
 appName = "custom"
 ```
+
+### Text rendering
+
+Use `EmbeddedPklTextLoader` to render config as JSON, YAML, or other text formats without needing generated Go types:
+
+```go
+loader := pklloader.EmbeddedPklTextLoader(configFS,
+    pklloader.WithSchema(schema.FS),
+    pklloader.WithOutputFormat("json"),
+)
+jsonText, err := loader(ctx, "app.pkl")
+```
+
+The PCF (Pkl Config Format) output omits the `amends` header. To roundtrip a config through text, prepend the header back:
+
+```go
+// Render to PCF
+loader := pklloader.EmbeddedPklTextLoader(configFS,
+    pklloader.WithSchema(schema.FS),
+    pklloader.WithOutputFormat("pcf"),
+)
+pcf, _ := loader(ctx, "app.pkl")
+
+// Roundtrip: prepend amends header, then reload as a typed struct
+roundtripped := "amends \"@schema/AppConfig.pkl\"\n\n" + pcf
+rtFS := fstest.MapFS{
+    "roundtripped.pkl": &fstest.MapFile{Data: []byte(roundtripped)},
+}
+cfg, _ := pklloader.Load[gen.AppConfig](ctx, "roundtripped.pkl",
+    pklloader.WithSchema(schema.FS),
+    pklloader.WithConfigFS(rtFS),
+)
+```
+
+This is useful for snapshotting resolved config (with all defaults applied) or converting between formats.
 
 ## Schema package setup
 

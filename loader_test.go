@@ -2,6 +2,7 @@ package pklloader
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -810,3 +811,141 @@ host = mon.endpoint
 	}
 }
 
+
+func TestEmbeddedPklTextLoaderJSON(t *testing.T) {
+	pklData := `amends "@schema/directnest/DirectConfig.pkl"
+
+appName = "text-output"
+host = "text.example.com"
+port = 1234
+`
+	configFS := fstest.MapFS{
+		"text.pkl": &fstest.MapFile{Data: []byte(pklData)},
+	}
+
+	loader := EmbeddedPklTextLoader(configFS,
+		WithSchema(config.FS),
+		WithOutputFormat("json"),
+	)
+	out, err := loader(context.Background(), "text.pkl")
+	if err != nil {
+		t.Fatalf("EmbeddedPklTextLoader returned error: %v", err)
+	}
+
+	var cfg directnest.DirectConfig
+	if err := json.Unmarshal([]byte(out), &cfg); err != nil {
+		t.Fatalf("unmarshal JSON output: %v\n%s", err, out)
+	}
+	if cfg.AppName != "text-output" {
+		t.Errorf("AppName = %q, want %q", cfg.AppName, "text-output")
+	}
+	if cfg.Host != "text.example.com" {
+		t.Errorf("Host = %q, want %q", cfg.Host, "text.example.com")
+	}
+	if cfg.Port != 1234 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 1234)
+	}
+}
+
+func TestEmbeddedPklTextLoaderYAML(t *testing.T) {
+	pklData := `amends "@schema/directnest/DirectConfig.pkl"
+
+appName = "yaml-output"
+`
+	configFS := fstest.MapFS{
+		"text.pkl": &fstest.MapFile{Data: []byte(pklData)},
+	}
+
+	loader := EmbeddedPklTextLoader(configFS,
+		WithSchema(config.FS),
+		WithOutputFormat("yaml"),
+	)
+	out, err := loader(context.Background(), "text.pkl")
+	if err != nil {
+		t.Fatalf("EmbeddedPklTextLoader returned error: %v", err)
+	}
+	if !strings.Contains(out, "appName: yaml-output") {
+		t.Errorf("expected YAML output to contain 'appName: yaml-output', got:\n%s", out)
+	}
+}
+
+func TestEmbeddedPklTextLoaderPCF(t *testing.T) {
+	pklData := `amends "@schema/directnest/DirectConfig.pkl"
+
+appName = "pcf-output"
+host = "pcf.example.com"
+port = 5555
+`
+	configFS := fstest.MapFS{
+		"text.pkl": &fstest.MapFile{Data: []byte(pklData)},
+	}
+
+	loader := EmbeddedPklTextLoader(configFS,
+		WithSchema(config.FS),
+		WithOutputFormat("pcf"),
+	)
+	out, err := loader(context.Background(), "text.pkl")
+	if err != nil {
+		t.Fatalf("EmbeddedPklTextLoader returned error: %v", err)
+	}
+	t.Logf("PCF output:\n%s", out)
+}
+
+func TestEmbeddedPklTextLoaderRoundtrip(t *testing.T) {
+	pklData := `amends "@schema/directnest/DirectConfig.pkl"
+
+appName = "roundtrip"
+host = "roundtrip.example.com"
+port = 9876
+enableCache = false
+`
+	configFS := fstest.MapFS{
+		"original.pkl": &fstest.MapFile{Data: []byte(pklData)},
+	}
+
+	// Render to PCF
+	loader := EmbeddedPklTextLoader(configFS,
+		WithSchema(config.FS),
+		WithOutputFormat("pcf"),
+	)
+	pcfOut, err := loader(context.Background(), "original.pkl")
+	if err != nil {
+		t.Fatalf("EmbeddedPklTextLoader returned error: %v", err)
+	}
+
+	// Prepend the amends header and reload
+	roundtripped := "amends \"@schema/directnest/DirectConfig.pkl\"\n\n" + pcfOut
+
+	roundtripFS := fstest.MapFS{
+		"roundtripped.pkl": &fstest.MapFile{Data: []byte(roundtripped)},
+	}
+
+	cfg, err := Load[directnest.DirectConfig](
+		context.Background(),
+		"roundtripped.pkl",
+		WithSchema(config.FS),
+		WithConfigFS(roundtripFS),
+	)
+	if err != nil {
+		t.Fatalf("Load roundtripped config returned error: %v", err)
+	}
+	if cfg.AppName != "roundtrip" {
+		t.Errorf("AppName = %q, want %q", cfg.AppName, "roundtrip")
+	}
+	if cfg.Host != "roundtrip.example.com" {
+		t.Errorf("Host = %q, want %q", cfg.Host, "roundtrip.example.com")
+	}
+	if cfg.Port != 9876 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 9876)
+	}
+	if cfg.EnableCache != false {
+		t.Errorf("EnableCache = %v, want false", cfg.EnableCache)
+	}
+	// Defaults should survive the roundtrip
+	if cfg.MaxRetries != 3 {
+		t.Errorf("MaxRetries = %d, want %d", cfg.MaxRetries, 3)
+	}
+	if cfg.Region != "us-east-1" {
+		t.Errorf("Region = %q, want %q", cfg.Region, "us-east-1")
+	}
+}
