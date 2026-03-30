@@ -191,80 +191,16 @@ func PklLoader[T any](projectDir string) func(context.Context, string) (T, error
 // Dependencies are configured via options (WithSchema, WithDependency, etc.)
 // and referenced in config files via @name imports.
 func EmbeddedPklLoader[T any](configFS fs.FS, opts ...Option) func(context.Context, string) (T, error) {
-	var o options
-	for _, fn := range opts {
-		fn(&o)
-	}
-
-	// Fill in defaults for each dependency.
-	for i := range o.deps {
-		if o.deps[i].PackageURI == "" {
-			o.deps[i].PackageURI = "package://localhost/" + o.deps[i].Name + "@0.0.0"
-		}
-	}
-
 	load := evaluate[T]
+	run := embeddedRunner(configFS, opts)
 	return func(ctx context.Context, filePath string) (T, error) {
 		var zero T
-
-		if len(o.deps) == 0 {
-			return zero, fmt.Errorf("config: no schema dependencies configured")
-		}
-
-		data, err := fs.ReadFile(configFS, filePath)
+		evaluator, source, cleanup, err := run(ctx, filePath)
 		if err != nil {
-			return zero, fmt.Errorf("config: read %s: %w", filePath, err)
+			return zero, err
 		}
-
-		entryURI := &url.URL{
-			Scheme: "embed",
-			Path:   filepath.Join("/", "config", filepath.Base(filepath.ToSlash(filePath))),
-		}
-
-		// Build the root deps.json by merging all dependencies' remote deps
-		// and adding each as a local dep entry.
-		rootDepsJSON, err := buildRootDepsJSONMulti(o.deps)
-		if err != nil {
-			return zero, fmt.Errorf("config: %w", err)
-		}
-
-		vfs := overlayFS{
-			{prefix: "config", inner: staticFS{name: "PklProject.deps.json", content: rootDepsJSON}},
-			{prefix: "config", inner: configFS},
-		}
-
-		rawDeps := make(map[string]any, len(o.deps))
-		for _, dep := range o.deps {
-			vfs = append(vfs, prefixFS{prefix: dep.Name, inner: dep.FS})
-
-			baseUri, version := splitPackageURI(dep.PackageURI)
-			rawDeps[dep.Name] = &pkl.Project{
-				ProjectFileUri: "embed:///" + dep.Name + "/PklProject",
-				Package: &pkl.ProjectPackage{
-					Name:    dep.Name,
-					BaseUri: baseUri,
-					Version: version,
-					Uri:     dep.PackageURI,
-				},
-			}
-		}
-
-		rootProject := &pkl.Project{
-			ProjectFileUri:  "embed:///config/PklProject",
-			RawDependencies: rawDeps,
-		}
-
-		evaluator, err := pkl.NewEvaluator(ctx,
-			pkl.PreconfiguredOptions,
-			pkl.WithFs(vfs, "embed"),
-			pkl.WithProject(rootProject),
-		)
-		if err != nil {
-			return zero, fmt.Errorf("config: create embedded pkl evaluator: %w", err)
-		}
-		defer evaluator.Close()
-
-		return load(ctx, evaluator, &pkl.ModuleSource{Uri: entryURI, Contents: string(data)})
+		defer cleanup()
+		return load(ctx, evaluator, source)
 	}
 }
 
@@ -275,14 +211,24 @@ func EmbeddedPklLoader[T any](configFS fs.FS, opts ...Option) func(context.Conte
 // This is useful for rendering config files to JSON, YAML, or other text
 // formats without needing generated Go types.
 func EmbeddedPklTextLoader(configFS fs.FS, opts ...Option) func(context.Context, string) (string, error) {
+	run := embeddedRunner(configFS, opts)
+	return func(ctx context.Context, filePath string) (string, error) {
+		evaluator, source, cleanup, err := run(ctx, filePath)
+		if err != nil {
+			return "", err
+		}
+		defer cleanup()
+		return evaluator.EvaluateOutputText(ctx, source)
+	}
+}
+
+// embeddedRunner builds the common evaluator setup shared by EmbeddedPklLoader
+// and EmbeddedPklTextLoader. It returns a function that, given a context and
+// file path, produces a ready evaluator, module source, and cleanup function.
+func embeddedRunner(configFS fs.FS, opts []Option) func(context.Context, string) (pkl.Evaluator, *pkl.ModuleSource, func(), error) {
 	var o options
 	for _, fn := range opts {
 		fn(&o)
-	}
-
-	outputFormat := o.outputFormat
-	if outputFormat == "" {
-		outputFormat = "pcf"
 	}
 
 	for i := range o.deps {
@@ -291,14 +237,18 @@ func EmbeddedPklTextLoader(configFS fs.FS, opts ...Option) func(context.Context,
 		}
 	}
 
-	return func(ctx context.Context, filePath string) (string, error) {
+	outputFormat := o.outputFormat
+
+	return func(ctx context.Context, filePath string) (pkl.Evaluator, *pkl.ModuleSource, func(), error) {
+		noop := func() {}
+
 		if len(o.deps) == 0 {
-			return "", fmt.Errorf("config: no schema dependencies configured")
+			return nil, nil, noop, fmt.Errorf("config: no schema dependencies configured")
 		}
 
 		data, err := fs.ReadFile(configFS, filePath)
 		if err != nil {
-			return "", fmt.Errorf("config: read %s: %w", filePath, err)
+			return nil, nil, noop, fmt.Errorf("config: read %s: %w", filePath, err)
 		}
 
 		entryURI := &url.URL{
@@ -308,7 +258,7 @@ func EmbeddedPklTextLoader(configFS fs.FS, opts ...Option) func(context.Context,
 
 		rootDepsJSON, err := buildRootDepsJSONMulti(o.deps)
 		if err != nil {
-			return "", fmt.Errorf("config: %w", err)
+			return nil, nil, noop, fmt.Errorf("config: %w", err)
 		}
 
 		vfs := overlayFS{
@@ -337,20 +287,24 @@ func EmbeddedPklTextLoader(configFS fs.FS, opts ...Option) func(context.Context,
 			RawDependencies: rawDeps,
 		}
 
-		evaluator, err := pkl.NewEvaluator(ctx,
+		evalOpts := []func(*pkl.EvaluatorOptions){
 			pkl.PreconfiguredOptions,
 			pkl.WithFs(vfs, "embed"),
 			pkl.WithProject(rootProject),
-			func(opts *pkl.EvaluatorOptions) {
-				opts.OutputFormat = outputFormat
-			},
-		)
-		if err != nil {
-			return "", fmt.Errorf("config: create embedded pkl evaluator: %w", err)
 		}
-		defer evaluator.Close()
+		if outputFormat != "" {
+			evalOpts = append(evalOpts, func(opts *pkl.EvaluatorOptions) {
+				opts.OutputFormat = outputFormat
+			})
+		}
 
-		return evaluator.EvaluateOutputText(ctx, &pkl.ModuleSource{Uri: entryURI, Contents: string(data)})
+		evaluator, err := pkl.NewEvaluator(ctx, evalOpts...)
+		if err != nil {
+			return nil, nil, noop, fmt.Errorf("config: create embedded pkl evaluator: %w", err)
+		}
+
+		source := &pkl.ModuleSource{Uri: entryURI, Contents: string(data)}
+		return evaluator, source, func() { evaluator.Close() }, nil
 	}
 }
 
