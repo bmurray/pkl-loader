@@ -1,0 +1,11 @@
+/// Configuration imported from a subdirectory.
+@go.Package { name = "github.com/bmurray/pkl-loader/tests/gen/nested" }
+module test_config.nested.NestedConfig
+
+import "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2#/go.pkl"
+
+/// Nested settings loaded from a child directory.
+class Nested {
+  label: String
+  priority: UInt8
+}

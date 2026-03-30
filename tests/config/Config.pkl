@@ -1,0 +1,40 @@
+/// Top-level application configuration schema.
+@go.Package { name = "github.com/bmurray/pkl-loader/tests/gen" }
+module test_config.AppConfig
+
+import "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2#/go.pkl"
+
+import "directnest/DirectConfig.pkl"
+import "nested/NestedConfig.pkl"
+import "SubConfig.pkl"
+
+/// Database connection settings.
+class Database {
+  host: String
+  port: UInt16
+  name: String
+}
+
+/// Feature flags and tunables.
+class Features {
+  enableCache: Boolean
+  maxRetries: UInt8
+}
+
+/// Top-level application configuration.
+class Config {
+  appName: String
+  database: Database
+  features: Features
+  sub: SubConfig.Sub
+  nested: NestedConfig.Nested
+}
+
+appName = "test-app"
+
+database: Database
+features: Features
+sub: SubConfig.Sub
+nested: NestedConfig.Nested
+
+direct: DirectConfig

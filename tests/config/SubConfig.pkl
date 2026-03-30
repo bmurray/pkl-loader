@@ -1,0 +1,11 @@
+/// Configuration imported from the same directory.
+@go.Package { name = "github.com/bmurray/pkl-loader/tests/gen/subconfig" }
+module test_config.SubConfig
+
+import "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2#/go.pkl"
+
+/// Sub-level settings loaded alongside the main config.
+class Sub {
+  region: String
+  enabled: Boolean
+}

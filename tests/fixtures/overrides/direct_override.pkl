@@ -1,0 +1,5 @@
+amends "@schema/directnest/DirectConfig.pkl"
+
+appName = "imported-direct"
+host = "import.example.com"
+port = 4433

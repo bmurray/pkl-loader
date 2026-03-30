@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "resolvedDependencies": {
+    "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0": {
+      "type": "remote",
+      "uri": "projectpackage://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2",
+      "checksums": {
+        "sha256": "f9f6caaab341eab8dfe5677c96db3a29af6dd3c9663512bf09cb920023952a41"
+      }
+    }
+  }
+}

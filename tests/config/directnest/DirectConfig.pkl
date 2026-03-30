@@ -1,0 +1,21 @@
+/// Flat configuration with no sub-classes and sensible defaults.
+@go.Package { name = "github.com/bmurray/pkl-loader/tests/gen/directnest" }
+module test_config.directnest.DirectConfig
+
+import "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2#/go.pkl"
+
+appName: String = "default-app"
+
+host: String = "localhost"
+
+port: UInt16 = 8080
+
+enableCache: Boolean = true
+
+maxRetries: UInt8 = 3
+
+region: String = "us-east-1"
+
+label: String = "primary"
+
+priority: UInt8 = 1

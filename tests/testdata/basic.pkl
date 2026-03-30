@@ -1,0 +1,24 @@
+amends "package://pkg.pkl-lang.org/bmurray/test-config@0.0.1#/Config.pkl"
+
+appName = "test-app"
+
+database {
+  host = "localhost"
+  port = 5432
+  name = "testdb"
+}
+
+features {
+  enableCache = true
+  maxRetries = 3
+}
+
+sub {
+  region = "us-east-1"
+  enabled = true
+}
+
+nested {
+  label = "primary"
+  priority = 1
+}

@@ -1,0 +1,13 @@
+/// Monitoring and alerting configuration.
+@go.Package { name = "github.com/bmurray/pkl-loader/tests/gen/extras" }
+module test_extras.Monitoring
+
+import "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2#/go.pkl"
+
+endpoint: String = "https://monitoring.example.com"
+
+interval: UInt16 = 30
+
+alertEmail: String = "ops@example.com"
+
+enabled: Boolean = true

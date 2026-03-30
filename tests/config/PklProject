@@ -1,0 +1,14 @@
+amends "pkl:Project"
+
+package {
+  name = "test-config"
+  baseUri = "package://pkg.pkl-lang.org/bmurray/test-config"
+  packageZipUrl = "https://github.com/bmurray/pkl-loader/releases/download/test-config@\(version)/test-config@\(version).zip"
+  version = "0.0.1"
+}
+
+dependencies {
+  ["pkl.golang"] {
+    uri = "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2"
+  }
+}
