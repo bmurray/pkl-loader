@@ -1,0 +1,13 @@
+amends "pkl:Project"
+
+evaluatorSettings {
+  externalModuleReaders {
+    ["testschema"] {
+      executable = "go"
+      arguments {
+        "run"
+        "./tests/cmd/pkl-reader"
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+amends "testschema:/directnest/DirectConfig.pkl"
+
+appName = "external-reader-app"
+host = "external.example.com"
+port = 7777

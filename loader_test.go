@@ -809,3 +809,4 @@ host = mon.endpoint
 		t.Errorf("Port = %d, want %d", cfg.Port, 8080)
 	}
 }
+
