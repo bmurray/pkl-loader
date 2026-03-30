@@ -25,6 +25,28 @@ type Config struct {
 cfg, err := pklloader.Load[Config](ctx, "config.yaml")
 ```
 
+### Pre-compiled Pkl (.pklbin)
+
+`.pklbin` files are pre-compiled Pkl modules with all dependencies resolved at build time. They load with a plain evaluator -- no schema FS, no project structure, no options needed.
+
+**Generate a .pklbin:**
+
+```bash
+pkl eval -f binary -o app.pklbin app.pkl
+```
+
+This resolves all `amends`, `import`, and `package://` references at build time and produces a self-contained binary.
+
+**Load it:**
+
+```go
+cfg, err := pklloader.Load[gen.AppConfig](ctx, "app.pklbin")
+```
+
+No `WithSchema` or `WithConfigFS` options are required. The `.pklbin` format is ideal for CI/CD pipelines where you want to validate and freeze configuration at build time, then ship a single binary artifact.
+
+You still need generated Go types (`gen.AppConfig`) to decode the result -- see the Pkl section below.
+
 ### Pkl with embedded schema
 
 Pkl loading requires **three things**: a schema package (`.pkl` files with a `PklProject`), **generated Go types** from that schema, and config files that amend the schema.
