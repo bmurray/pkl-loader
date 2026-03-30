@@ -1,4 +1,4 @@
-amends "testschema:/directnest/DirectConfig.pkl"
+amends "@schema/directnest/DirectConfig.pkl"
 
 appName = "external-reader-app"
 host = "external.example.com"

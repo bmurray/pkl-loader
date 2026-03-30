@@ -1,5 +1,11 @@
 amends "pkl:Project"
 
+dependencies {
+  ["schema"] {
+    uri = "package://pkg.pkl-lang.org/bmurray/test-config@0.0.1"
+  }
+}
+
 evaluatorSettings {
   externalModuleReaders {
     ["testschema"] {
