@@ -103,12 +103,47 @@ port = 8080
 
 #### Step 5: Load it
 
+The `configFS` is the filesystem where your config `.pkl` files live. You have two options:
+
+**Option A: Config files on disk** (e.g. mounted as a Kubernetes secret, or in a config directory)
+
+```go
+// Read config files from a directory on disk.
+// The filePath is relative to the directory.
+cfg, err := pklloader.Load[gen.AppConfig](ctx, "app.pkl",
+    pklloader.WithSchema(config.FS),
+    pklloader.WithConfigDir("/etc/myapp/config"),
+)
+```
+
+If you omit both `WithConfigFS` and `WithConfigDir`, config files are read from disk relative to `filePath`:
+
+```go
+// Reads /etc/myapp/config/app.pkl from disk directly.
+cfg, err := pklloader.Load[gen.AppConfig](ctx, "/etc/myapp/config/app.pkl",
+    pklloader.WithSchema(config.FS),
+)
+```
+
+**Option B: Config files embedded in the binary** (e.g. for testing, or shipping defaults)
+
+```go
+package fixtures
+
+import "embed"
+
+//go:embed all:*.pkl all:**/*.pkl
+var FS embed.FS
+```
+
 ```go
 cfg, err := pklloader.Load[gen.AppConfig](ctx, "app.pkl",
     pklloader.WithSchema(config.FS),
-    pklloader.WithConfigFS(configFS),
+    pklloader.WithConfigFS(fixtures.FS),
 )
 ```
+
+This is useful for tests, default configurations, or when you want the entire application to be a single binary with no external files.
 
 Config files reference the schema via `@schema/...` imports. The `@schema` prefix is the default dependency name and can be customized.
 
