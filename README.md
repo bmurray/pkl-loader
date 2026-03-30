@@ -27,16 +27,39 @@ cfg, err := pklloader.Load[Config](ctx, "config.yaml")
 
 ### Pkl with embedded schema
 
-1. **Define your schema** in a Pkl package with a `PklProject` and `PklProject.deps.json`:
+Pkl loading requires **three things**: a schema package (`.pkl` files with a `PklProject`), **generated Go types** from that schema, and config files that amend the schema.
+
+You **must** generate Go structs from your Pkl schema before using this library. The generic type parameter `T` in `Load[T]` needs concrete Go types that match your schema's structure. Without generated types, the evaluator has nothing to decode into.
+
+#### Step 1: Define your schema
+
+Create a Pkl package with a `PklProject` and `PklProject.deps.json`:
 
 ```
 config/
   PklProject
   PklProject.deps.json
   AppConfig.pkl
+  embed.go
 ```
 
-2. **Embed the schema** in your Go binary:
+#### Step 2: Generate Go types
+
+Run the Pkl Go code generator to produce Go structs from your schema:
+
+```bash
+pkl run package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2#/gen.pkl \
+    -p projectDir=config \
+    -p moduleDir=config \
+    --output-path . \
+    -- config/AppConfig.pkl
+```
+
+This produces Go files (e.g. `gen/AppConfig.pkl.go`) with structs like `gen.AppConfig` that mirror your Pkl module's properties. These are the types you pass as `T` to `Load[T]`.
+
+You can also add this as a `go:generate` directive (see [Generating Go types](#generating-go-types) below).
+
+#### Step 3: Embed the schema
 
 ```go
 package config
@@ -47,7 +70,7 @@ import "embed"
 var FS embed.FS
 ```
 
-3. **Write a config file** that amends the schema:
+#### Step 4: Write a config file
 
 ```pkl
 amends "@schema/AppConfig.pkl"
@@ -56,7 +79,7 @@ appName = "my-service"
 port = 8080
 ```
 
-4. **Load it**:
+#### Step 5: Load it
 
 ```go
 cfg, err := pklloader.Load[gen.AppConfig](ctx, "app.pkl",
