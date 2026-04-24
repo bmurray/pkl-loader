@@ -271,8 +271,17 @@ func embeddedRunner(configFS fs.FS, opts []Option) func(context.Context, string)
 			vfs = append(vfs, prefixFS{prefix: dep.Name, inner: dep.FS})
 
 			baseUri, version := splitPackageURI(dep.PackageURI)
+
+			// Parse the dependency's own deps so shorthand imports
+			// (e.g. @pkl.golang) resolve inside the schema.
+			depRawDeps, err := parseRawDependencies(dep.FS)
+			if err != nil {
+				return nil, nil, noop, fmt.Errorf("config: parse dependencies for %s: %w", dep.Name, err)
+			}
+
 			rawDeps[dep.Name] = &pkl.Project{
-				ProjectFileUri: "embed:///" + dep.Name + "/PklProject",
+				ProjectFileUri:  "embed:///" + dep.Name + "/PklProject",
+				RawDependencies: depRawDeps,
 				Package: &pkl.ProjectPackage{
 					Name:    dep.Name,
 					BaseUri: baseUri,
@@ -401,6 +410,65 @@ func buildRootDepsJSONMulti(deps []Dependency) ([]byte, error) {
 		SchemaVersion:        1,
 		ResolvedDependencies: resolved,
 	})
+}
+
+// parseRawDependencies reads PklProject.deps.json from fsys and returns a
+// map suitable for pkl.Project.RawDependencies. Remote dependencies become
+// *pkl.ProjectRemoteDependency entries keyed by their dependency name
+// (derived from the package URI path).
+func parseRawDependencies(fsys fs.FS) (map[string]any, error) {
+	data, err := fs.ReadFile(fsys, "PklProject.deps.json")
+	if err != nil {
+		return nil, fmt.Errorf("read PklProject.deps.json: %w", err)
+	}
+
+	var depsFile struct {
+		ResolvedDependencies map[string]struct {
+			Type string `json:"type"`
+			URI  string `json:"uri"`
+			Checksums *struct {
+				Sha256 string `json:"sha256"`
+			} `json:"checksums"`
+		} `json:"resolvedDependencies"`
+	}
+	if err := json.Unmarshal(data, &depsFile); err != nil {
+		return nil, fmt.Errorf("decode PklProject.deps.json: %w", err)
+	}
+
+	raw := make(map[string]any)
+	for _, dep := range depsFile.ResolvedDependencies {
+		if dep.Type != "remote" {
+			continue
+		}
+		// Extract the dependency name from the URI path.
+		// e.g. "projectpackage://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2"
+		// → package URI "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2"
+		pkgURI := strings.Replace(dep.URI, "projectpackage://", "package://", 1)
+		name := depNameFromURI(pkgURI)
+		// Omit checksums — pkl-go has a msgpack serialization bug
+		// (field tagged "checksums" instead of "sha256") that causes
+		// "Missing message parameter sha256" errors.
+		raw[name] = &pkl.ProjectRemoteDependency{PackageUri: pkgURI}
+	}
+	return raw, nil
+}
+
+// depNameFromURI extracts the dependency name from a package URI.
+// "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2" → "pkl.golang"
+func depNameFromURI(uri string) string {
+	// Strip scheme
+	path := uri
+	if idx := strings.Index(uri, "://"); idx >= 0 {
+		path = uri[idx+3:]
+	}
+	// Get the last path segment before @version
+	if atIdx := strings.LastIndex(path, "@"); atIdx >= 0 {
+		path = path[:atIdx]
+	}
+	if slashIdx := strings.LastIndex(path, "/"); slashIdx >= 0 {
+		path = path[slashIdx+1:]
+	}
+	return path
 }
 
 // splitPackageURI splits "package://example.com/foo@1.2.3" into

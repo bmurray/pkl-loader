@@ -1,0 +1,11 @@
+/// Simple config using shorthand dependency import.
+@go.Package { name = "github.com/bmurray/pkl-loader/tests/gen/shorthand" }
+module shorthand_config.Config
+
+import "@pkl.golang/go.pkl"
+
+appName: String = "default"
+
+port: UInt16 = 8080
+
+debug: Boolean = false

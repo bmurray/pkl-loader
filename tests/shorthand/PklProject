@@ -1,0 +1,14 @@
+amends "pkl:Project"
+
+package {
+  name = "shorthand-config"
+  baseUri = "package://pkg.pkl-lang.org/bmurray/shorthand-config"
+  packageZipUrl = "https://github.com/bmurray/pkl-loader/releases/download/shorthand-config@\(version)/shorthand-config@\(version).zip"
+  version = "0.0.1"
+}
+
+dependencies {
+  ["pkl.golang"] {
+    uri = "package://pkg.pkl-lang.org/pkl-go/pkl.golang@0.13.2"
+  }
+}

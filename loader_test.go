@@ -17,6 +17,8 @@ import (
 	"github.com/bmurray/pkl-loader/tests/gen"
 	"github.com/bmurray/pkl-loader/tests/gen/directnest"
 	_ "github.com/bmurray/pkl-loader/tests/gen/nested"
+	"github.com/bmurray/pkl-loader/tests/gen/shorthand"
+	shorthandSchema "github.com/bmurray/pkl-loader/tests/shorthand"
 	_ "github.com/bmurray/pkl-loader/tests/gen/subconfig"
 )
 
@@ -947,5 +949,36 @@ enableCache = false
 	}
 	if cfg.Region != "us-east-1" {
 		t.Errorf("Region = %q, want %q", cfg.Region, "us-east-1")
+	}
+}
+
+func TestLoadShorthandDependency(t *testing.T) {
+	pklData := `amends "@schema/Config.pkl"
+
+appName = "shorthand-test"
+port = 3000
+debug = true
+`
+	configFS := fstest.MapFS{
+		"app.pkl": &fstest.MapFile{Data: []byte(pklData)},
+	}
+
+	cfg, err := Load[shorthand.Config](
+		context.Background(),
+		"app.pkl",
+		WithSchema(shorthandSchema.FS),
+		WithConfigFS(configFS),
+	)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.AppName != "shorthand-test" {
+		t.Errorf("AppName = %q, want %q", cfg.AppName, "shorthand-test")
+	}
+	if cfg.Port != 3000 {
+		t.Errorf("Port = %d, want %d", cfg.Port, 3000)
+	}
+	if cfg.Debug != true {
+		t.Errorf("Debug = %v, want true", cfg.Debug)
 	}
 }

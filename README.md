@@ -1,5 +1,7 @@
 # pkl-loader
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/bmurray/pkl-loader.svg)](https://pkg.go.dev/github.com/bmurray/pkl-loader)
+
 A Go library for loading application configuration with automatic format detection. Supports `.pkl`, `.pklbin`, `.json`, `.yaml`, and `.yml` files with a fallback resolution order when no extension is given.
 
 The primary use case is embedding [Pkl](https://pkl-lang.org/) schema packages into Go binaries so that `.pkl` config files can be evaluated at runtime without any on-disk project structure.
